@@ -1,0 +1,424 @@
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: Prod
+  VpcCIDR: 
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.0.0/24
+
+  PublicSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.1.0/24
+
+  PrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.2.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.3.0/24
+
+  InstanceType:
+    Description: 
+        "The EC2 instance type of general purpose"
+    Type: String
+    AllowedValues: [t2.medium, t3.small, t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge]
+    Default: t3.small
+Resources:
+  VPC: 
+    Type: AWS::EC2::VPC
+    Properties:
+        CidrBlock: !Ref VpcCIDR
+        EnableDnsHostnames: true
+        Tags: 
+            - Key: Name 
+              Value: !Ref EnvironmentName
+  InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+            
+  InternetGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+          InternetGatewayId: !Ref InternetGateway
+          VpcId: !Ref VPC
+  PublicSubnet1: 
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [ 0, !GetAZs '' ]
+        CidrBlock: !Ref PublicSubnet1CIDR
+        MapPublicIpOnLaunch: true
+        Tags: 
+            - Key: Name 
+              Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+  PublicSubnet2: 
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref VPC
+          AvailabilityZone: !Select [ 1, !GetAZs '' ]
+          CidrBlock: !Ref PublicSubnet2CIDR
+          MapPublicIpOnLaunch: true
+          Tags: 
+              - Key: Name 
+                Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+  PrivateSubnet1: 
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref VPC
+          AvailabilityZone: !Select [ 0, !GetAZs '' ]
+          CidrBlock: !Ref PrivateSubnet1CIDR
+          MapPublicIpOnLaunch: false
+          Tags: 
+              - Key: Name 
+                Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+  PrivateSubnet2: 
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref VPC
+          AvailabilityZone: !Select [ 1, !GetAZs '' ]
+          CidrBlock: !Ref PrivateSubnet2CIDR
+          MapPublicIpOnLaunch: false
+          Tags: 
+              - Key: Name 
+                Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+  
+  NatGateway1EIP:
+      Type: AWS::EC2::EIP
+      DependsOn: InternetGatewayAttachment
+      Properties: 
+          Domain: vpc
+
+  NatGateway2EIP:
+      Type: AWS::EC2::EIP
+      DependsOn: InternetGatewayAttachment
+      Properties:
+          Domain: vpc
+
+  NatGateway1: 
+      Type: AWS::EC2::NatGateway
+      Properties: 
+          AllocationId: !GetAtt NatGateway1EIP.AllocationId
+          SubnetId: !Ref PublicSubnet1
+
+  NatGateway2: 
+      Type: AWS::EC2::NatGateway
+      Properties:
+          AllocationId: !GetAtt NatGateway2EIP.AllocationId
+          SubnetId: !Ref PublicSubnet2
+  PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties: 
+          VpcId: !Ref VPC
+          Tags: 
+              - Key: Name 
+                Value: !Sub ${EnvironmentName} Public Routes
+
+  DefaultPublicRoute: 
+      Type: AWS::EC2::Route
+      DependsOn: InternetGatewayAttachment
+      Properties: 
+          RouteTableId: !Ref PublicRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+          GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PublicRouteTable
+          SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PublicRouteTable
+          SubnetId: !Ref PublicSubnet2
+
+  PrivateRouteTable1:
+      Type: AWS::EC2::RouteTable
+      Properties: 
+          VpcId: !Ref VPC
+          Tags: 
+              - Key: Name 
+                Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+  DefaultPrivateRoute1:
+      Type: AWS::EC2::Route
+      Properties:
+          RouteTableId: !Ref PrivateRouteTable1
+          DestinationCidrBlock: 0.0.0.0/0
+          NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PrivateRouteTable1
+          SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTable2:
+      Type: AWS::EC2::RouteTable
+      Properties: 
+          VpcId: !Ref VPC
+          Tags: 
+              - Key: Name 
+                Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+
+  DefaultPrivateRoute2:
+      Type: AWS::EC2::Route
+      Properties:
+          RouteTableId: !Ref PrivateRouteTable2
+          DestinationCidrBlock: 0.0.0.0/0
+          NatGatewayId: !Ref NatGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PrivateRouteTable2
+          SubnetId: !Ref PrivateSubnet2
+  
+  LoadBalancerSecGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow http traffic to and from load balancer
+            VpcId: !Ref VPC
+            SecurityGroupIngress:
+            -   IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+            -   IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+  WebAppTargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+          HealthCheckIntervalSeconds: 10
+          HealthCheckPath: /
+          HealthCheckProtocol: HTTP
+          HealthCheckTimeoutSeconds: 8
+          HealthyThresholdCount: 2
+          Port: 80
+          Protocol: HTTP
+          UnhealthyThresholdCount: 5
+          VpcId: !Ref VPC
+  WebAppLB:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Properties:
+          SecurityGroups:
+          - Ref: LoadBalancerSecGroup
+          Subnets:
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+  Listener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+          DefaultActions:
+          -   Type: forward
+              TargetGroupArn:
+                  Ref: WebAppTargetGroup
+          LoadBalancerArn:
+              Ref: WebAppLB
+          Port: '80'
+          Protocol: HTTP
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+        Actions:
+        -   Type: forward
+            TargetGroupArn: !Ref 'WebAppTargetGroup'
+        Conditions:
+        -   Field: path-pattern
+            Values: [/]
+        ListenerArn: !Ref 'Listener'
+        Priority: 1
+  RootRole:
+      Type: AWS::IAM::Role
+      Properties:
+          RoleName: 
+              !Sub ${EnvironmentName}-Role
+          AssumeRolePolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+              -   Effect: Allow
+                  Principal:
+                      Service:
+                      - ec2.amazonaws.com
+                  Action:
+                  - sts:AssumeRole
+          Path: "/"
+
+  RolePolicies:
+      Type: AWS::IAM::Policy
+      Properties:
+          PolicyName: AmazonS3ReadOnlyAccess
+          PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+              - 
+                  Effect: Allow
+                  Action: 
+                  -   s3:Get*
+                  -   s3:List*
+                  Resource: 
+                  -   arn:aws:s3:::udacity-websiteme
+                  -   arn:aws:s3:::udacity-websiteme/*
+          Roles:
+          -   Ref: RootRole
+
+  RootInstanceProfile:
+      Type: AWS::IAM::InstanceProfile
+      Properties:
+          Path: "/"
+          Roles:
+          - Ref: RootRole
+  WebServerSecGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: Allow http and ssh
+          VpcId: !Ref VPC
+          SecurityGroupIngress:
+          -   IpProtocol: tcp
+              FromPort: 80
+              ToPort: 80
+              CidrIp: 0.0.0.0/0
+          SecurityGroupEgress:
+          -   IpProtocol: tcp
+              FromPort: 0
+              ToPort: 65535
+              CidrIp: 0.0.0.0/0
+  WebAppGroup:
+        Type: AWS::AutoScaling::AutoScalingGroup
+        Properties:
+            VPCZoneIdentifier:  
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2 
+            LaunchConfigurationName:
+                Ref: WebAppLaunchConfig
+            MinSize: '2'
+            MaxSize: '5'
+            TargetGroupARNs:
+            -   Ref: WebAppTargetGroup
+  WebAppLaunchConfig: 
+        Type: AWS::AutoScaling::LaunchConfiguration
+        Properties:
+            UserData:
+                Fn::Base64: !Sub |
+                    #!/bin/bash
+                    apt-get update -qq
+                    apt-get install -y apt-transport-https ca-certificates
+                    apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+                    echo "deb https://apt.dockerproject.org/repo ubuntu-xenial main" | tee /etc/apt/sources.list.d/docker.list
+                    apt-get update -qq
+                    apt-get purge lxc-docker || true
+                    apt-get -y install linux-image-extra-$(uname -r) linux-image-extra-virtual
+                    apt-get -y install docker-engine
+                    usermod -aG docker ubuntu
+                    mkdir -p /etc/systemd/system/docker.service.d
+                    printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375\n" >>  /etc/systemd/system/docker.service.d/docker.conf
+                    systemctl daemon-reload
+                    systemctl restart docker
+            ImageId: ami-06f2f779464715dc5
+            KeyName: UdaEC2West
+            IamInstanceProfile: !Ref RootInstanceProfile
+            SecurityGroups:
+            -   Ref: WebServerSecGroup
+            InstanceType: !Ref 'InstanceType'
+            BlockDeviceMappings:
+            -   DeviceName: "/dev/sdk"
+                Ebs:
+                    VolumeSize: '10' #10GB
+  WebNode1:
+        Type: AWS::EC2::Instance
+        Properties:
+            UserData: 
+                Fn::Base64: |
+                    #!/bin/bash
+                    apt-get update -y
+                    apt-get install unzip awscli -y
+                    apt-get install apache2 -y
+                    systemctl start apache2.service
+                    cd /var/www/html
+                    aws s3 copy s3://udacity-websiteme/Archive.zip .
+                    unzip -o Archive.zip
+            ImageId: ami-06f2f779464715dc5
+            KeyName: UdaEC2West
+            InstanceType: !Ref 'InstanceType'
+            SecurityGroupIds: [!Ref 'WebServerSecGroup']
+            SubnetId: !Ref PublicSubnet1
+            BlockDeviceMappings:
+            -   DeviceName: "/dev/sdk"
+                Ebs:
+                    VolumeSize: '10' #10GB
+  WebNode2:
+        Type: AWS::EC2::Instance
+        Properties:
+            UserData: 
+                Fn::Base64: |
+                    #!/bin/bash
+                    apt-get update -y
+                    apt-get install unzip awscli -y
+                    apt-get install apache2 -y
+                    systemctl start apache2.service
+                    cd /var/www/html
+                    aws s3 copy s3://udacity-websiteme/Archive.zip .
+                    unzip -o Archive.zip
+            ImageId: ami-06f2f779464715dc5
+            KeyName: UdaEC2West
+            InstanceType: !Ref 'InstanceType'
+            SecurityGroupIds: [!Ref 'WebServerSecGroup']
+            SubnetId: !Ref PublicSubnet2
+            BlockDeviceMappings:
+            -   DeviceName: "/dev/sdk"
+                Ebs:
+                    VolumeSize: '10' #10GB
+Outputs: 
+  VPC: 
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Sub ${EnvironmentName}-VPCID
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
+    Export:
+      Name: !Sub ${EnvironmentName}-PUB-NETS
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
+    Export:
+      Name: !Sub ${EnvironmentName}-PRIV-NETS
+  PublicSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PUB1-SN
+  PublicSubnet2: 
+    Description: A reference to the public subnet in the 2nd Availability Zone
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-PUB2-SN
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PRI1-SN
+  WebAppLoadBalancerDNSName:
+    Description: DNS name or Public URL of the Load Balancer
+    Value: !Join [ "", [ 'http://', !GetAtt WebAppLB.DNSName ]]
+    Export:
+        Name: !Sub ${EnvironmentName}-LB-DNSName
