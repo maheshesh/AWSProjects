@@ -319,21 +319,30 @@ Resources:
             UserData:
                 Fn::Base64: !Sub |
                     #!/bin/bash
-                    apt-get update -qq
-                    apt-get install -y apt-transport-https ca-certificates
-                    apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
-                    echo "deb https://apt.dockerproject.org/repo ubuntu-xenial main" | tee /etc/apt/sources.list.d/docker.list
-                    apt-get update -qq
-                    apt-get purge lxc-docker || true
-                    apt-get -y install linux-image-extra-$(uname -r) linux-image-extra-virtual
-                    apt-get -y install docker-engine
-                    usermod -aG docker ubuntu
-                    mkdir -p /etc/systemd/system/docker.service.d
-                    printf "[Service]\nExecStart=\nExecStart=/usr/bin/dockerd -H fd:// -H tcp://0.0.0.0:2375\n" >>  /etc/systemd/system/docker.service.d/docker.conf
-                    systemctl daemon-reload
-                    systemctl restart docker
+                    sudo apt-get update
+                    sudo apt-get install -y \
+                    apt-transport-https \
+                    ca-certificates \
+                    curl \
+                    gnupg-agent \
+                    software-properties-common \
+                    awscli
+                    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+                    sudo add-apt-repository \
+                    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+                    $(lsb_release -cs) \
+                    stable"
+                    sudo apt-get update -y
+                    sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+                    sudo usermod -aG docker ubuntu
+                    sudo mkdir /app/
+                    cd /app
+                    sudo wget https://udacity-websiteme.s3.amazonaws.com/Archive.zip 
+                    sudo chmod 777 -R /app/
+                    unzip -o Archive.zip
+                    sudo service apache2 stop
+                    sudo docker run -l service=nginx --name nginx-appM -p 80:80 -d -v /app/:/usr/share/nginx/html nginx
             ImageId: ami-06f2f779464715dc5
-            KeyName: UdaEC2West
             IamInstanceProfile: !Ref RootInstanceProfile
             SecurityGroups:
             -   Ref: WebServerSecGroup
