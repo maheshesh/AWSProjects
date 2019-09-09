@@ -289,7 +289,7 @@ Resources:
   WebServerSecGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
-          GroupDescription: Allow http and ssh
+          GroupDescription: Allow http
           VpcId: !Ref VPC
           SecurityGroupIngress:
           -   IpProtocol: tcp
@@ -300,6 +300,21 @@ Resources:
           -   IpProtocol: tcp
               FromPort: 0
               ToPort: 65535
+              CidrIp: 0.0.0.0/0
+  BastionSecGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: Allow ssh
+          VpcId: !Ref VPC
+          SecurityGroupIngress:
+          -   IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: 0.0.0.0/0
+          SecurityGroupEgress:
+          -   IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
               CidrIp: 0.0.0.0/0
   WebAppGroup:
         Type: AWS::AutoScaling::AutoScalingGroup
@@ -334,16 +349,18 @@ Resources:
                     stable"
                     sudo apt-get update -y
                     sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+                    sudo apt install unzip
                     sudo usermod -aG docker ubuntu
                     sudo mkdir /app/
                     cd /app
                     sudo wget https://udacity-websiteme.s3.amazonaws.com/Archive.zip 
                     sudo chmod 777 -R /app/
                     unzip -o Archive.zip
-                    sudo service apache2 stop
+                    sudo chmod 777 -R /app/
                     sudo docker run -l service=nginx --name nginx-appM -p 80:80 -d -v /app/:/usr/share/nginx/html nginx
             ImageId: ami-06f2f779464715dc5
             IamInstanceProfile: !Ref RootInstanceProfile
+            #KeyName: UdaEC2West  Use this for debugging when you need to connect via ssh from bastion
             SecurityGroups:
             -   Ref: WebServerSecGroup
             InstanceType: !Ref 'InstanceType'
@@ -353,7 +370,7 @@ Resources:
                     VolumeSize: '10' #10GB
   WebNode1:
         Type: AWS::EC2::Instance
-        Properties:
+        Properties:  # This is also used as a bastion host to connect to a private subnet EC2 instance the Security group to allow ssh from local
             UserData: 
                 Fn::Base64: |
                     #!/bin/bash
@@ -367,7 +384,7 @@ Resources:
             ImageId: ami-06f2f779464715dc5
             KeyName: UdaEC2West
             InstanceType: !Ref 'InstanceType'
-            SecurityGroupIds: [!Ref 'WebServerSecGroup']
+            SecurityGroupIds: [!Ref 'WebServerSecGroup', !Ref 'BastionSecGroup']
             SubnetId: !Ref PublicSubnet1
             BlockDeviceMappings:
             -   DeviceName: "/dev/sdk"
@@ -431,3 +448,8 @@ Outputs:
     Value: !Join [ "", [ 'http://', !GetAtt WebAppLB.DNSName ]]
     Export:
         Name: !Sub ${EnvironmentName}-LB-DNSName
+  WebNode1:
+    Description: AWS Instance can be used as Bastion host to connect to private subnet for debugging
+    Value: !Ref WebNode1
+    Export:
+        Name: !Sub ${EnvironmentName}-PUB1-WebBastion
