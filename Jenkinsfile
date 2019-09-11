@@ -6,5 +6,10 @@ pipeline {
         sleep(time: 1, unit: 'MICROSECONDS')
       }
     }
+    stage('Test') {
+      steps {
+        s3Download(file: 'index.html', bucket: 'udacity-websiteme', path: 'https://udacity-websiteme.s3.amazonaws.com/')
+      }
+    }
   }
 }
