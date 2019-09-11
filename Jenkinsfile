@@ -3,7 +3,7 @@ pipeline {
   stages {
     stage('Dev') {
       steps {
-        sleep 10
+        sleep(time: 1, unit: 'MICROSECONDS')
       }
     }
   }
