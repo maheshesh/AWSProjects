@@ -8,7 +8,7 @@ pipeline {
     }
     stage('Test') {
       steps {
-        s3Download(file: 'index.html', bucket: 'udacity-websiteme', path: 'index.html', payloadSigningEnabled: true, force: true, pathStyleAccessEnabled: true)
+        s3Download(file: 'index.html', bucket: 'udacity-websiteme', path: 'https://udacity-websiteme.s3.amazonaws.com/', payloadSigningEnabled: true, force: true, pathStyleAccessEnabled: true)
       }
     }
   }
