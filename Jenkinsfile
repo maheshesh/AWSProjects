@@ -8,7 +8,7 @@ pipeline {
     }
     stage('Test') {
       steps {
-        s3Download(file: 'index.html', bucket: 'udacity-websiteme', path: 'https://udacity-websiteme.s3.amazonaws.com/')
+        s3DoesObjectExist(bucket: 'udacity-websiteme', path: 'index.html')
       }
     }
   }
